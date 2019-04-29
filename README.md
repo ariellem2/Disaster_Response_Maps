@@ -13,6 +13,7 @@ This repository includes:
 - A notebook that can be run for live data collection
 - Jupyter notebooks walking through our project development process
 - Code for potential next steps using Google Maps, Bokeh, and Flask
+- Recommendations for future iterations of the project
 
 ### Contents
 - Notebook pre-requisites
@@ -30,7 +31,7 @@ In order to run our code, you will need to acquire API credentials from both Twi
 **Twitter API:**
 - In order to use the Twitter API, users are required to have an account and a valid phone number.
 - Register and create [Twitter Application](https://apps.twitter.com/) to get API access keys and tokens.
-       
+
 **HERE.com API:**
 - Register for a HERE.com developer API key and tokens for free [Here](https://developer.here.com/?create=Freemium-Basic&keepState=true&step=account).
 
@@ -44,17 +45,46 @@ Keep in mind that the search index has a 7-day limit. In other words, no tweets 
 ```
 To overcome this, we used documentation from "Get old tweets from Twitter" (source listed below) and colleted the tweets from 01/01/2016 till 04/14/2019. In the end, we sourced historical data from 79 Traffic and News accounts in North and South Carolina, and using the Twitter API and the Tweepy tool we collected 147799 historical tweets.
 
-Of those, 8,000 were from the time period of Hurricane Florence, and it was those we used to build our model to determine what tweets were and were not related to road closures. 
+Of those, 8,000 were from the time period of Hurricane Florence and it was those we used to build our model to determine what tweets were and were not related to road closures.
 
 #### Cleaning and Exploratory Data Analysis
 
+Of the 8000 tweets between 9/10/18-9/30/18 (time period for Hurricane Florence), we eliminated the ones where the tweet was empty, or if it was a duplicate tweet.   We also removed the irrelevant columns.
+
+Our data was then ready for NLP.  We used Regular Expressions and Lemmatization to remove any unnecessary words or punctuations from the tweets.
+
+Our data was unsupervised, so we needed to create a target variable - whether a tweet has road closure information or not.  We tried 2 approaches:
+1. Using key words to identify which tweets had information on road closures
+2. Hardcoding the road closure tweets
+
+The model performed better with the first approach, so we used that for the final model.  We had 3 lists:
+word_list1 = ['road', 'street','rd', 'hwy', 'highway', 'ave', 'avenue','intersection']
+word_list2 = ['closed','closure', 'blocked', 'flooded']
+not_word_list = ['lane closed', 'lane closure','cleared', 're opened', 'reopen']
+
+For a tweet to be a road closure tweet, it needed to have at least 1 word from word_list1, at least 1 word from word_list2, and could not have a word from not_word_list.
 
 ### Model Development and Analysis
 
+In order to build a model, we had to first tokenize the words.  We tried CountVectorizer and TFIDFVectorizer. We created a function for fitting and scoring a model, the function included a Pipeline (vectorizer, estimator) and GridSearch.  This allowed us to easily test multiple models.
+
+Our biggest challenge was that our classes were extremely imbalanced, ~350 road closures vs 7500+ non-road closures.  So we needed to use techniques to handle imbalanced classes.
+
+In terms of evaluating our models, we had to make sure we reduced the False Positives, i.e. model predicts a non-road closure when it is actually closed.  Because we don't want the emergency responders to get stuck.
+
+So instead of using Accuracy score as the metric (default for GridSearch), we used ROC AUC score, so we could minimize the False Positives.
+
+We started out with Logistic Regression, and found the optimal  parameters using TFIDFVectorizer as that worked better than CountVectorizer.
+
+Our ROC AUC score wasn't great, so we tried Gradient Boosting.  That boosted our score, and reduced False Positives.
+
+Finally, we used SMOTE technique to synthetically generate more samples for the minority class (road closures).  This helped the model enormously.  We were able to get a ROC AUC score of 0.96, and only 6 tweets out of 349 were wrongly predicted.
+
+We also tried KMeans and DBSCAN, but those models didn't work very well for us. 
 
 ### Live Data Collection
 
-Our live data collection process requires the input of an address that a user wants live traffic information for. We then use Selenium, a web browser automation tool, to search for exact location coordinates that can be used by both the HERE.com and Twitter search tools as a search parameter. For Twitter, this location data was used to create a circular radius. For HERE.com, this data was used to create what map developers call a bounding box- 
+Our live data collection process requires the input of an address that a user wants live traffic information for. We then use Selenium, a web browser automation tool, to search for exact location coordinates that can be used by both the HERE.com and Twitter search tools as a search parameter. For Twitter, this location data was used to create a circular radius. For HERE.com, this data was used to create what map developers call a bounding box-
 
 **Twitter Data**
 The Twitter data is collected using a search function that finds tweets within a 25mi radius of the inputted address related to a list of 9 search terms.
@@ -88,41 +118,41 @@ Those points are added to the twitter data and used by our mapping tool.
 - Google Maps API
 
 **Overview**
-After using Selenium to select the bounding box and converting the geocoordinates into a clean dataframe/csv, we are able to plot the road closures. This dataframe includes location data from here.com and twitter. 
+After using Selenium to select the bounding box and converting the geocoordinates into a clean dataframe/csv, we are able to plot the road closures. This dataframe includes location data from here.com and twitter.
 
 **Challenges**
-- The biggest challenge here was how to incorporate geolocation data from two sources in an accurate way. 
-- From a technical standpoint, the biggest challenge was finding a way to connect the start and end points of the road closures in a visually appealing way. 
-    
+- The biggest challenge here was how to incorporate geolocation data from two sources in an accurate way.
+- From a technical standpoint, the biggest challenge was finding a way to connect the start and end points of the road closures in a visually appealing way.
+
 **Final Products**
 1. Tableau: https://public.tableau.com/profile/arielle7797#!/vizhome/EmergencyRoadClosures/RoadClosures?publish=yes
     - Using Tableau, we were able to create a single interation of a successful map.  
-    - Tableau was the most optimal choice because of the mapbox integration. This shows the user real time traffic/congestion as the underlying map on which the road closures are plotted. 
+    - Tableau was the most optimal choice because of the mapbox integration. This shows the user real time traffic/congestion as the underlying map on which the road closures are plotted.
     - The Twitter and Here.com data are marked in different colors, which allows the user to differentiate between the sources.
- 
+
 
 2. Bokeh with Google Maps: linked in the repository   
-    - Using an API connection to Google Maps and python Bokeh library, this version returns a dynamic map in html format. 
+    - Using an API connection to Google Maps and python Bokeh library, this version returns a dynamic map in html format.
     - The latitudes and longitudes are passed through as 2 separate series matched on index to form a single geolocation coordinate.
-    - As a next step, the start and end points of the road closures should be mapped together (similar to the tableau map). 
+    - As a next step, the start and end points of the road closures should be mapped together (similar to the tableau map).
     - This example is a good foundation to continue to build upon for a future live site or app using python code.
-    
-    
+
+
 ### Conclusion & Recommendations
 
-We were able to build a successful model and mapping process for tweets that included exact geolocation data, successfully mapping them in concurance with data from HERE.com to display road blocks in a 25-mile radius from an address. 
+We were able to build a successful model and mapping process for tweets that included exact geolocation data, successfully mapping them in concurance with data from HERE.com to display road blocks in a 25-mile radius from an address.
 
 Our model struggles with tweets that only include city-level location data. The size of our dataset is not large enough to train a robust model that easily identifies full addresses in order to map them.
- 
-1. Flask : Given that most of the code is written in Python, we recommend using flask to integrate the below in order to maintain the code in a single place and holistic manner. 
+
+1. Flask : Given that most of the code is written in Python, we recommend using flask to integrate the below in order to maintain the code in a single place and holistic manner.
     A) API Connections
-    B) Twitter & Here.com Scraping and EDA 
-    C) Modeling 
-    D) Bokeh Mapping 
+    B) Twitter & Here.com Scraping and EDA
+    C) Modeling
+    D) Bokeh Mapping
 
-2. Google Maps : Explore paid opportunities with Google Maps for true optimization & directions of routes that include the new mapped road closures, in addition to showing real time traffic & congestion. We could also enhance the utility by including search capabilities for first responders to type in an address/destination that requires aid. 
+2. Google Maps : Explore paid opportunities with Google Maps for true optimization & directions of routes that include the new mapped road closures, in addition to showing real time traffic & congestion. We could also enhance the utility by including search capabilities for first responders to type in an address/destination that requires aid.
 
-3. Twitter : Work with Twitter to build a stronger crowdsourced dataset during emergencies 
+3. Twitter : Work with Twitter to build a stronger crowdsourced dataset during emergencies
 
 4. A More Robust Data Set : More data collected from natural disasters on traffic to help our model successfully read tweets
 
@@ -136,7 +166,7 @@ Our model struggles with tweets that only include city-level location data. The 
 
 [Get old tweets from Twitter](https://pypi.org/project/GetOldTweets3/)
 
- 
+
 ### Project Team:
 * **Arielle Miro**
 * **Aruna Rayapeddi**
